@@ -1,0 +1,22 @@
+- Execute sql instructions
+cd projectDir
+python manage.py shell
+
+    - Insert
+    from gestionPedidos.models import Articulos
+    art=Articulos(nombre='mesa', seccion='decoracion', precio=90)       
+    art.save()
+
+    art3=Articulos.objects.create(nombre='taladro', seccion='ferreteria', precio=65)
+
+    - Update
+    art.precio=95
+    art.save()
+
+    - Delete
+    art5=Articulos.objects.get(id=2)
+    art5.delete()
+
+    - Create select statement
+    Lista=Articulos.objects.all()
+    Lista.query.__str__()
