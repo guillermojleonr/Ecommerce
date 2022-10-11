@@ -1,5 +1,8 @@
 # Django tutorial
 
+## Create a virtual enviroment
+Before starting, create a virtual enviroment
+
 ## Instalations
 ### Django
 - Install django
@@ -90,5 +93,42 @@ Or
 
 - Create superuser
 `python manage.py createsuperuser`
+
+- Create superuser non-interactively
+
+
+1. Open cmd terminal
+Watch all enviroment variables to see if already exist the ones we need.
+
+``set``
+
+2. Set or overwrite enviroment variables
+
+``set DJANGO_SUPERUSER_USERNAME=admin``
+
+``set DJANGO_SUPERUSER_EMAIL=email@xxx.com``
+
+``set DJANGO_SUPERUSER_EMAIL=emailrandom524@gmail.com``
+
+3. Run 
+``manage.py createsuperuser --noinput``
+
+
+If you need to clear an enviroment variable run
+
+``set ENVIROMENT_VARIABLE=``
+
+To manipulate enviroment variables using python
+
+``import os``
+
+get environment variables
+
+``os.getenv('ENVIROMEN_VARIABLE')``
+
+print all enviroment variables
+
+``print(os.environ)``
+
 
 
