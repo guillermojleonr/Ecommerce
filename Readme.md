@@ -1,0 +1,1 @@
+Ecommerce is a learning Django repository. It functions as an eCommerce web-app
