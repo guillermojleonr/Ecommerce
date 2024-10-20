@@ -266,6 +266,41 @@ def delete_book(request, book_id):
         return render(request, 'books/delete_error.html', {'error': str(e)})
 ```
 
+You can use Class-Based Views (CBVs) or Function-Based Views (FBVs) but if you use CBVs remember to not use _generic built-in class views_ as these are tightly coupled with models requiring a model object to work.
+
+This is a _custom class-based views_ decoupled from the models layer.
+
+```
+from django.views import View
+from django.shortcuts import render, redirect
+from .service import BookService
+from .forms import BookForm
+
+class BookListView(View):
+    def __init__(self):
+        self.service = BookService()
+
+    def get(self, request):
+        books = self.service.list_books()
+        return render(request, 'books/list.html', {'books': books})
+
+class BookCreateView(View):
+    def __init__(self):
+        self.service = BookService()
+
+    def get(self, request):
+        form = BookForm()
+        return render(request, 'books/create.html', {'form': form})
+
+    def post(self, request):
+        form = BookForm(request.POST)
+        if form.is_valid():
+            self.service.create_book(form.cleaned_data)
+            return redirect('book-list')
+        return render(request, 'books/create.html', {'form': form})
+```
+
+
 ### Templates
 The _MVT Template_ refers to HTML Templates with a built-in tags language to incluide dynamic data.
 
