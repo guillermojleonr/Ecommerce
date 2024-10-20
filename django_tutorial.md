@@ -52,15 +52,41 @@ This is not a complete django course, it is just a template to remind you the dj
 
 Django is based on an architecture-design-pattern Model-View-Template (_MVT_) similar to Model-View-Controller (_MVC_) with some concepts switched.
 
+Here we are going to define an architecture pattern where MVC-MVT is enriched with some decoupling practices such as _repository pattern_ and other layers, because only MVC-MVT can be enough to divide some responsabilities but the result is very coupled, making it hard to switch frameworks
+
 ### Models
 
 _MVT Model_ equivalent to _MVC Model_
 
-Defined in `models.py`. Contains the core-business-domain logic and the core data entities, this is the deepest layer and in theory the code here can be reused with minimal modifications on other frameworks.
+Defined in `models.py`. Contains the data schema definition, relationships and validation at the model level (remember that different types of validations have to be on all layers), 
 
-Obviously the _data entities_ if a different ORM is used on other framework, it has to be addapted but the core-business-domain python logic should remain untouch.
+Obviously the _data entities_ if a different ORM is used on other framework, it has to be addapted but the core-business-domain.
 
-Even this is the deepest layer and it is related to _data entities_ do not include database implementation here, always use the desing pattern _repository_ to make the databases interchangeable.
+Even this is the deepest layer and it is related to _data entities_ do not include CRUD or _data access logic_ here, always use the desing pattern _repository_ to make the databases interchangeable.
+
+```
+#models.py
+
+from django.db import models
+from django.core.validators import MinValueValidator
+
+class Author(models.Model):
+    name = models.CharField(max_length=100)
+    birthdate = models.DateField()
+
+    def __str__(self):
+        return self.name
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE)
+    published_date = models.DateField()
+    price = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0)])
+
+    def __str__(self):
+        return self.title
+```
+
 
 #### Migrations
 
@@ -81,17 +107,167 @@ Or
 
 To run all migrations `python manage.py migrate`
 
+### Repository pattern
+
+Here you can incluide the data access logic and CRUD operations, custom queries, filtering, etc.
+
+This would allow you to switch to a different database or ORM without affecting the business logic.
+
+```
+#repository.py
+
+from .models import Book, Author
+
+class BookRepository:
+    @staticmethod
+    def get_all_books():
+        return Book.objects.all()
+
+    @staticmethod
+    def get_book_by_id(book_id):
+        return Book.objects.filter(id=book_id).first()
+
+    @staticmethod
+    def get_books_by_author(author_name):
+        return Book.objects.filter(author__name=author_name)
+
+    @staticmethod
+    def create_book(title, author, published_date, price):
+        author_instance = Author.objects.get(id=author)
+        return Book.objects.create(title=title, author=author_instance, published_date=published_date, price=price)
+
+    @staticmethod
+    def update_book_price(book, new_price):
+        book.price = new_price
+        book.save()
+
+    @staticmethod
+    def delete_book(book):
+        book.delete()
+
+class AuthorRepository:
+    @staticmethod
+    def get_all_authors():
+        return Author.objects.all()
+
+    @staticmethod
+    def get_author_by_id(author_id):
+        return Author.objects.filter(id=author_id).first()
+```
+
+### Core-Domain-Business Layers: services, use cases, etc.
+
+Interacts with the repository and contains all the business rules
+
+```
+# services.py
+
+from .repositories import BookRepository, AuthorRepository
+
+class BookService:
+    @staticmethod
+    def list_books_with_discount():
+        books = BookRepository.get_all_books()
+        for book in books:
+            if book.price > 100:
+                book.price *= 0.9  # Apply a discount
+        return books
+
+    @staticmethod
+    def create_new_book(title, author_id, published_date, price):
+        # Business rule: Validate the price
+        if price <= 0:
+            raise ValueError("Price must be greater than 0")
+        
+        # Business rule: Ensure the author exists
+        author = AuthorRepository.get_author_by_id(author_id)
+        if not author:
+            raise ValueError("Author does not exist")
+
+        return BookRepository.create_book(title, author.id, published_date, price)
+
+    @staticmethod
+    def update_book_price(book_id, new_price):
+        book = BookRepository.get_book_by_id(book_id)
+        if not book:
+            raise ValueError("Book not found")
+        
+        if book.price != new_price:
+            BookRepository.update_book_price(book, new_price)
+
+    @staticmethod
+    def delete_book(book_id):
+        book = BookRepository.get_book_by_id(book_id)
+        if not book:
+            raise ValueError("Book not found")
+        BookRepository.delete_book(book)
+```
+
 ### Views
-_MVT View_ equivalent to _MVC Controller_ .Yes it is weird and unintuitive but that's the way it is.
 
-This is the architectural component that makes the comunication between _Models_ and _Templates_
+This is the architectural component that comunicating _Models_ and _Templates_ in this architecture, also comunicating with _Repositories_ and _Business layers_.
 
-No core-business-domain logic should be placed here, just framework-related logic.
+Handles the request/response cycle (presentation layer). Keep views as thin as possible. This makes the view layer more about handling HTTP and less about business logic
+
+No core-business-domain logic should be placed here, just framework-related logic. Create separate business layers that handling all business logic. 
+
+This keeps the views thin and allows you to easily swap out the framework without touching core logic.
+
+```
+#views.py
+
+from django.shortcuts import render, redirect, get_object_or_404
+from .services import BookService
+from .repositories import AuthorRepository
+
+def list_books(request):
+    books = BookService.list_books_with_discount()  # Fetch all books with discount logic
+    return render(request, 'books/list.html', {'books': books})
+
+def book_detail(request, book_id):
+    book = BookService.get_book_by_id(book_id)
+    if not book:
+        return render(request, '404.html')
+    return render(request, 'books/detail.html', {'book': book})
+
+def create_book(request):
+    if request.method == 'POST':
+        title = request.POST['title']
+        author_id = request.POST['author']
+        published_date = request.POST['published_date']
+        price = float(request.POST['price'])
+
+        try:
+            BookService.create_new_book(title, author_id, published_date, price)
+            return redirect('list_books')
+        except ValueError as e:
+            return render(request, 'books/create.html', {'error': str(e)})
+
+    authors = AuthorRepository.get_all_authors()
+    return render(request, 'books/create.html', {'authors': authors})
+
+def update_book_price(request, book_id):
+    if request.method == 'POST':
+        new_price = float(request.POST['price'])
+
+        try:
+            BookService.update_book_price(book_id, new_price)
+            return redirect('book_detail', book_id=book_id)
+        except ValueError as e:
+            return render(request, 'books/update_price.html', {'error': str(e), 'book_id': book_id})
+
+    return render(request, 'books/update_price.html', {'book_id': book_id})
+
+def delete_book(request, book_id):
+    try:
+        BookService.delete_book(book_id)
+        return redirect('list_books')
+    except ValueError as e:
+        return render(request, 'books/delete_error.html', {'error': str(e)})
+```
 
 ### Templates
-The _MVT Template_ equivalent  _MVC Views_. Once again concepts switched.
-
-These are the HTML Templates with a built-in tags language to incluide dynamic data.
+The _MVT Template_ refers to HTML Templates with a built-in tags language to incluide dynamic data.
 
 ### Routing
 Django uses server-side rendering, meaning that the HTML is sent to the browser by the server everytime a request is made to a _route_ (URL) 
